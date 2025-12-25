@@ -6,7 +6,7 @@
 
     <groupId>io.healthsamurai.keycloak</groupId>
     <artifactId>keycloak-fhir-auditevent-plugin</artifactId>
-    <version>1.0.0</version>
+    <version>0.1.0</version>
     <packaging>jar</packaging>
 
     <name>Keycloak FHIR AuditEvent Plugin</name>
@@ -193,6 +193,28 @@
                                     </excludes>
                                 </filter>
                             </filters>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Remove original JAR after shade plugin creates shaded version -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <delete>
+                                    <fileset dir="${project.build.directory}" includes="original-*.jar"/>
+                                </delete>
+                            </target>
                         </configuration>
                     </execution>
                 </executions>
