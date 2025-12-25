@@ -1,6 +1,6 @@
 # Keycloak FHIR AuditEvent Plugin
 
-A Keycloak SPI plugin that converts authentication and admin events to FHIR R4 AuditEvents and sends them to any FHIR server.
+A Keycloak SPI plugin that converts user and admin events to FHIR R4 AuditEvents and sends them to any FHIR server.
 
 ## Features
 
