@@ -1,0 +1,158 @@
+# Variables for reuse across mappings
+values:
+  dicom: "http://dicom.nema.org/resources/ontology/DCM"
+
+  # User Authentication"
+  auth_event_code: "110114"
+
+  # Application Activity
+  app_activity_code: "110100"
+
+  # Outcome
+  outcome_success: "0"
+  outcome_failure: "4"
+
+  # Subtype
+  subtype_login_code: "110122"
+  subtype_logout_code: "110123"
+  subtype_user_security_changed_code: "110137"
+  
+  # Keycloak system URIs
+  keycloak_system: "https://keycloak.org/fhir/audit-event"
+
+# Event type mappings: Keycloak event type -> FHIR AuditEvent mapping
+eventMappings:
+  # Authentication events
+  LOGIN:
+    code: "$auth_event_code"
+    display: "User Authentication"
+    action: "E"
+    outcome: "$outcome_success"
+    subtype:
+      system: "$dicom"
+      code: "$subtype_login_code"
+      display: "Login"
+
+  LOGIN_ERROR:
+    code: "$auth_event_code"
+    display: "User Authentication"
+    action: "E"
+    outcome: "$outcome_failure"
+    subtype:
+      system: "$dicom"
+      code: "$subtype_login_code"
+      display: "Login"
+
+  LOGOUT:
+    code: "$auth_event_code"
+    display: "User Authentication"
+    action: "E"
+    outcome: "$outcome_success"
+    subtype:
+      system: "$dicom"
+      code: "$subtype_logout_code"
+      display: "Logout"
+
+  # Client events
+  CLIENT_LOGIN:
+    code: "$auth_event_code"
+    display: "User Authentication"
+    action: "E"
+    outcome: "$outcome_success"
+
+  CLIENT_LOGIN_ERROR:
+    code: "$auth_event_code"
+    display: "User Authentication"
+    action: "E"
+    outcome: "$outcome_failure"
+
+  # Password reset events
+  SEND_RESET_PASSWORD:
+    code: "$app_activity_code"
+    display: "Application Activity"
+    action: "E"
+    outcome: "$outcome_success"
+
+  SEND_RESET_PASSWORD_ERROR:
+    code: "$app_activity_code"
+    display: "Application Activity"
+    action: "E"
+    outcome: "$outcome_failure"
+
+  RESET_PASSWORD:
+    code: "$app_activity_code"
+    display: "Application Activity"
+    action: "U"
+    outcome: "$outcome_success"
+
+  RESET_PASSWORD_ERROR:
+    code: "$app_activity_code"
+    display: "Application Activity"
+    action: "U"
+    outcome: "$outcome_failure"
+
+  # Password update events
+  UPDATE_PASSWORD:
+    code: "$app_activity_code"
+    display: "Application Activity"
+    action: "U"
+    outcome: "$outcome_success"
+    subtype:
+      system: "$dicom"
+      code: "$subtype_user_security_changed_code"
+      display: "User security Attributes Changed"
+
+  UPDATE_PASSWORD_ERROR:
+    code: "$app_activity_code"
+    display: "Application Activity"
+    action: "U"
+    outcome: "$outcome_failure"
+    subtype:
+      system: "$dicom"
+      code: "$subtype_user_security_changed_code"
+      display: "User security Attributes Changed"
+
+  # Account deletion events
+  DELETE_ACCOUNT:
+    code: "$app_activity_code"
+    display: "Application Activity"
+    action: "D"
+    outcome: "$outcome_success"
+
+  DELETE_ACCOUNT_ERROR:
+    code: "$app_activity_code"
+    display: "Application Activity"
+    action: "D"
+    outcome: "$outcome_failure"
+
+  # Admin events
+  ADMIN_CREATE:
+    code: "$app_activity_code"
+    display: "Application Activity"
+    action: "C"
+    outcome: "$outcome_success"
+
+  ADMIN_UPDATE:
+    code: "$app_activity_code"
+    display: "Application Activity"
+    action: "U"
+    outcome: "$outcome_success"
+
+  ADMIN_DELETE:
+    code: "$app_activity_code"
+    display: "Application Activity"
+    action: "D"
+    outcome: "$outcome_success"
+
+  ADMIN_ACTION:
+    code: "$app_activity_code"
+    display: "Application Activity"
+    action: "E"
+    outcome: "$outcome_success"
+
+# Default mapping for unknown event types
+defaultMapping:
+  code: "$app_activity_code"
+  display: "Application Activity"
+  action: "E"
+  outcome: "$outcome_success"
