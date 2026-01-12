@@ -34,7 +34,9 @@ public class FhirAuditEventProviderFactory implements EventListenerProviderFacto
     @Override
     public EventListenerProvider create(KeycloakSession session) {
         log.debug("Creating FhirAuditEventProvider for session");
-        return new FhirAuditEventProvider(session, fhirClient);
+        // Create FhirClient with session for internal token provider support
+        FhirClient clientWithSession = new FhirClient(session);
+        return new FhirAuditEventProvider(session, clientWithSession);
     }
 
     /**
