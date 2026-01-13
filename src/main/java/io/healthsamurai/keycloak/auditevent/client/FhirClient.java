@@ -13,6 +13,7 @@ import java.util.Base64;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import org.keycloak.models.KeycloakSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,6 +28,7 @@ public class FhirClient {
     private final String fhirServerUrl;
     private final String authType;
     private final String authHeader;
+    private final KeycloakInternalTokenProvider internalTokenProvider;
     private final HttpClient httpClient;
     private final ExecutorService executor;
     private final boolean asyncEnabled;
@@ -35,10 +37,28 @@ public class FhirClient {
      * Creates a new FhirClient with configuration from environment/system properties.
      */
     public FhirClient() {
+        this(null);
+    }
+
+    /**
+     * Creates a new FhirClient with KeycloakSession for internal token provider.
+     *
+     * @param session The Keycloak session (can be null)
+     */
+    public FhirClient(KeycloakSession session) {
         this.fhirServerUrl = PluginConfig.getFhirServerUrl();
         this.authType = PluginConfig.getAuthType();
-        this.authHeader = buildAuthHeader();
         this.asyncEnabled = PluginConfig.isAsyncEnabled();
+
+        // Initialize internal token provider if using keycloak auth and session is available
+        if (PluginConfig.AUTH_TYPE_KEYCLOAK.equals(authType) && session != null) {
+            log.debug("Initializing KeycloakInternalTokenProvider for internal API token retrieval");
+            this.internalTokenProvider = new KeycloakInternalTokenProvider(session);
+            this.authHeader = null; // Will be obtained dynamically
+        } else {
+            this.internalTokenProvider = null;
+            this.authHeader = buildAuthHeader();
+        }
 
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(PluginConfig.CONNECTION_TIMEOUT_SECONDS))
@@ -52,6 +72,9 @@ public class FhirClient {
 
         log.info("FhirClient initialized - URL: {}, Auth: {}, Async: {}",
                 fhirServerUrl, authType, asyncEnabled);
+        if (PluginConfig.AUTH_TYPE_KEYCLOAK.equals(authType) && session != null) {
+            log.debug("FhirClient: Using Keycloak internal API for token retrieval (no HTTP)");
+        }
     }
 
     /**
@@ -62,6 +85,7 @@ public class FhirClient {
         this.fhirServerUrl = fhirServerUrl;
         this.authType = authType;
         this.authHeader = authHeader;
+        this.internalTokenProvider = null;
         this.asyncEnabled = false;
         this.executor = Executors.newSingleThreadExecutor();
     }
@@ -117,8 +141,9 @@ public class FhirClient {
                     .POST(HttpRequest.BodyPublishers.ofString(jsonBody, StandardCharsets.UTF_8));
 
             // Add auth header if configured
-            if (authHeader != null && !authHeader.isEmpty()) {
-                requestBuilder.header("Authorization", authHeader);
+            String authHeaderToUse = getAuthHeader();
+            if (authHeaderToUse != null && !authHeaderToUse.isEmpty()) {
+                requestBuilder.header("Authorization", authHeaderToUse);
             }
 
             HttpRequest request = requestBuilder.build();
@@ -141,6 +166,30 @@ public class FhirClient {
                 log.debug("Full error:", e);
             }
         }
+    }
+
+    /**
+     * Gets the authorization header for the current request.
+     * For keycloak auth type, dynamically fetches token from internal provider.
+     */
+    private String getAuthHeader() {
+        if (PluginConfig.AUTH_TYPE_KEYCLOAK.equals(authType)) {
+            // Dynamically get token from internal provider
+            if (internalTokenProvider != null) {
+                log.debug("Requesting bearer token from KeycloakInternalTokenProvider");
+                String token = internalTokenProvider.getBearerToken();
+                if (token != null && !token.isEmpty()) {
+                    log.debug("Successfully obtained bearer token (length: {})", token.length());
+                    return "Bearer " + token;
+                }
+                log.warn("Keycloak auth configured but failed to obtain token");
+                return null;
+            }
+            log.warn("Keycloak auth configured but token provider not initialized");
+            return null;
+        }
+        // For static auth types, use cached header
+        return authHeader;
     }
 
     private String buildAuthHeader() {
