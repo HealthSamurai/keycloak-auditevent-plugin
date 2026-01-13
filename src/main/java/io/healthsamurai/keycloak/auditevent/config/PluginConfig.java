@@ -45,9 +45,6 @@ public final class PluginConfig {
     /** Keycloak realm name */
     public static final String KEYCLOAK_REALM = "KEYCLOAK_REALM";
 
-    /** Keycloak client secret for service account */
-    public static final String KEYCLOAK_CLIENT_SECRET = "KEYCLOAK_CLIENT_SECRET";
-
     // ==================== Default Values ====================
 
     public static final String DEFAULT_FHIR_SERVER_URL = "http://localhost:8080/fhir";
