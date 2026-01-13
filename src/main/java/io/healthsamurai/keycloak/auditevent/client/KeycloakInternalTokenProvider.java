@@ -9,17 +9,17 @@ import org.keycloak.models.UserSessionModel;
 import org.keycloak.models.AuthenticatedClientSessionModel;
 import org.keycloak.services.util.DefaultClientSessionContext;
 import org.keycloak.representations.AccessToken;
-import org.keycloak.common.util.Time;
-import org.keycloak.jose.jws.JWSBuilder;
 import org.keycloak.models.ClientSessionContext;
+import org.keycloak.protocol.oidc.OIDCLoginProtocol;
+import org.keycloak.protocol.oidc.TokenManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
  * Provider for obtaining bearer tokens from Keycloak using internal API (no HTTP).
- * Uses KeycloakSession to create and sign tokens using native Keycloak 26 API.
+ * Uses KeycloakSession and TokenManager to create and sign tokens using native Keycloak 26 API.
  *
- * This implementation directly creates AccessToken and signs it using the realm's RSA key.
+ * This implementation uses Keycloak's TokenManager for proper token generation with all required claims.
  */
 public class KeycloakInternalTokenProvider {
 
@@ -50,7 +50,7 @@ public class KeycloakInternalTokenProvider {
 
     /**
      * Gets a bearer token using Keycloak native API (no HTTP, no reflection).
-     * Creates and signs JWT token directly using realm's RSA key.
+     * Creates and signs JWT token using TokenManager with all proper claims.
      *
      * @return Bearer token string (without "Bearer " prefix), or null if failed
      */
@@ -90,15 +90,15 @@ public class KeycloakInternalTokenProvider {
 
             log.debug("Found service account user: {}", serviceAccountUser.getId());
 
-            // Create token using native Keycloak 26 API
-            String token = createTokenManually(realm, client, serviceAccountUser);
+            // Create token using TokenManager (proper Keycloak way)
+            String token = createTokenViaTokenManager(realm, client, serviceAccountUser);
             if (token != null && !token.isEmpty()) {
-                log.info("Successfully created token using native Keycloak API");
+                log.info("Successfully created token using TokenManager");
                 return token;
             }
 
             // Token creation failed
-            log.error("Could not create bearer token using native Keycloak API");
+            log.error("Could not create bearer token using TokenManager");
             log.error("Possible reasons:");
             log.error("  - Service account not properly configured for client '{}'", clientId);
             log.error("  - Missing permissions or roles on service account");
@@ -123,17 +123,29 @@ public class KeycloakInternalTokenProvider {
 
 
     /**
-     * Creates a token manually using native Keycloak 26 API.
-     * This approach directly creates an AccessToken and signs it using the session's keys.
+     * Creates a token using Keycloak's TokenManager.
+     * This is the proper way to create tokens - TokenManager handles all claims,
+     * token mappers, scopes, and signing automatically.
      */
-    private String createTokenManually(RealmModel realm, ClientModel client, UserModel serviceAccountUser) {
+    private String createTokenViaTokenManager(
+            RealmModel realm,
+            ClientModel client,
+            UserModel serviceAccountUser
+    ) {
         try {
-            log.debug("Creating token manually for service account user: {}", serviceAccountUser.getUsername());
+            log.debug("Creating token via TokenManager for service account user: {}", serviceAccountUser.getUsername());
 
-            // Create user session for service account
+            // 1. Create user session for service account
             UserSessionModel userSession = session.sessions().createUserSession(
-                    realm, serviceAccountUser, serviceAccountUser.getUsername(),
-                    "127.0.0.1", "service-account", false, null, null);
+                    realm,
+                    serviceAccountUser,
+                    serviceAccountUser.getUsername(),
+                    "internal",
+                    "service-account",
+                    false,
+                    null,
+                    null
+            );
 
             if (userSession == null) {
                 log.error("Failed to create user session for service account");
@@ -142,82 +154,68 @@ public class KeycloakInternalTokenProvider {
 
             log.debug("Created user session: {}", userSession.getId());
 
-            // Create authenticated client session
-            AuthenticatedClientSessionModel clientSession = session.sessions()
-                    .createClientSession(realm, client, userSession);
+            // 2. Create authenticated client session
+            AuthenticatedClientSessionModel clientSession =
+                    session.sessions().createClientSession(realm, client, userSession);
 
             if (clientSession == null) {
                 log.error("Failed to create client session");
                 return null;
             }
 
+            // Set protocol to OIDC (important for token generation)
+            clientSession.setProtocol(OIDCLoginProtocol.LOGIN_PROTOCOL);
+
             log.debug("Created client session for client: {}", client.getClientId());
 
-            // Create client session context
-            ClientSessionContext clientSessionCtx = DefaultClientSessionContext
-                    .fromClientSessionScopeParameter(clientSession, session);
+            // 3. Create ClientSessionContext (ВАЖНО - содержит scopes и mappers)
+            ClientSessionContext clientSessionCtx =
+                    DefaultClientSessionContext.fromClientSessionScopeParameter(
+                            clientSession, session
+                    );
 
-            // Create AccessToken
-            AccessToken token = new AccessToken();
-            token.id(org.keycloak.models.utils.KeycloakModelUtils.generateId());
-            token.type("Bearer");
-            token.subject(serviceAccountUser.getId());
+            // 4. Use TokenManager to create proper AccessToken with all claims
+            TokenManager tokenManager = new TokenManager();
 
-            // Build issuer URL
-            String issuer = session.getContext().getUri().getBaseUri().toString() + "realms/" + realm.getName();
-            token.issuer(issuer);
+            AccessToken accessToken = tokenManager.createClientAccessToken(
+                    session,
+                    realm,
+                    client,
+                    serviceAccountUser,
+                    userSession,
+                    clientSessionCtx
+            );
 
-            token.issuedNow();
-
-            // Set expiration using exp(Long) method
-            int expirationTime = Time.currentTime() + realm.getAccessTokenLifespan();
-            token.exp((long) expirationTime);
-
-            // Set azp (authorized party) - using field directly
-            token.setOtherClaims("azp", client.getClientId());
-
-            // Add audience
-            token.audience(client.getClientId());
-
-            // Add session state - using field directly
-            token.setOtherClaims("session_state", userSession.getId());
-
-            // Set allowed origins
-            if (client.getRootUrl() != null) {
-                token.setAllowedOrigins(java.util.Collections.singleton(client.getRootUrl()));
-            }
-
-            // Add realm access roles
-            java.util.Set<String> realmRoles = new java.util.HashSet<>();
-            serviceAccountUser.getRoleMappingsStream().forEach(role -> {
-                if (role.getContainer().equals(realm)) {
-                    realmRoles.add(role.getName());
-                }
-            });
-            if (!realmRoles.isEmpty()) {
-                token.setRealmAccess(new org.keycloak.representations.AccessToken.Access().roles(realmRoles));
-            }
-
-            log.debug("AccessToken created with ID: {}, Subject: {}", token.getId(), token.getSubject());
-
-            // Sign the token using JWSBuilder and realm's active RS256 key
-            String tokenString = new JWSBuilder()
-                    .type("JWT")
-                    .jsonContent(token)
-                    .rsa256(session.keys().getActiveRsaKey(realm).getPrivateKey());
-
-            if (tokenString == null || tokenString.isEmpty()) {
-                log.error("Failed to sign token - JWSBuilder returned null");
+            if (accessToken == null) {
+                log.error("TokenManager returned null AccessToken");
                 return null;
             }
 
-            log.info("Successfully created and signed token manually (length: {})", tokenString.length());
-            log.debug("Token expires at: {}", new java.util.Date(token.getExp() * 1000L));
+            log.debug("AccessToken created with ID: {}, Subject: {}, Issuer: {}",
+                    accessToken.getId(), accessToken.getSubject(), accessToken.getIssuer());
+
+            // 5. Sign and serialize token using session.tokens().encode()
+            // This automatically adds kid to JWT header and uses proper signing
+            String tokenString = session.tokens().encode(accessToken);
+
+            if (tokenString == null || tokenString.isEmpty()) {
+                log.error("Failed to encode token - session.tokens().encode() returned null");
+                return null;
+            }
+
+            log.info("Successfully created and signed token via TokenManager (length: {})", tokenString.length());
+            log.debug("Token issuer: {}", accessToken.getIssuer());
+            log.debug("Token expires at: {}", new java.util.Date(accessToken.getExp() * 1000L));
+
+            // Log first and last 20 chars of token for debugging (don't log full token in production)
+            if (log.isDebugEnabled() && tokenString.length() > 40) {
+                String tokenPreview = tokenString.substring(0, 20) + "..." + tokenString.substring(tokenString.length() - 20);
+                log.debug("Token preview: {}", tokenPreview);
+            }
 
             return tokenString;
-
         } catch (Exception e) {
-            log.error("Failed to create token manually: {} - {}",
+            log.error("Failed to create token via TokenManager: {} - {}",
                     e.getClass().getSimpleName(), e.getMessage());
             if (log.isDebugEnabled()) {
                 log.debug("Full exception:", e);
