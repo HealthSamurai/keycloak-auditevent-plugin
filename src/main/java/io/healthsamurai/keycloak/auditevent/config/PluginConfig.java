@@ -39,6 +39,12 @@ public final class PluginConfig {
     /** Enable/disable debug mode (logs original Keycloak events and AuditEvents) */
     public static final String FHIR_DEBUG_ENABLED = "FHIR_DEBUG_ENABLED";
 
+    /** Keycloak client ID for service account */
+    public static final String KEYCLOAK_CLIENT_ID = "KEYCLOAK_CLIENT_ID";
+
+    /** Keycloak realm name */
+    public static final String KEYCLOAK_REALM = "KEYCLOAK_REALM";
+
     // ==================== Default Values ====================
 
     public static final String DEFAULT_FHIR_SERVER_URL = "http://localhost:8080/fhir";
@@ -58,6 +64,7 @@ public final class PluginConfig {
     public static final String AUTH_TYPE_NONE = "none";
     public static final String AUTH_TYPE_BASIC = "basic";
     public static final String AUTH_TYPE_BEARER = "bearer";
+    public static final String AUTH_TYPE_KEYCLOAK = "keycloak";
 
     // ==================== Helper Methods ====================
 
