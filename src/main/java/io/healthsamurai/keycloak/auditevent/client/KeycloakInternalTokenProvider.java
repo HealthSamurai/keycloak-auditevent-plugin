@@ -174,7 +174,11 @@ public class KeycloakInternalTokenProvider {
                             clientSession, session
                     );
 
-            // 4. Use TokenManager to create proper AccessToken with all claims
+            // 4. Set realm and client in session context (required for TokenManager)
+            session.getContext().setRealm(realm);
+            session.getContext().setClient(client);
+
+            // 5. Use TokenManager to create proper AccessToken with all claims
             TokenManager tokenManager = new TokenManager();
 
             AccessToken accessToken = tokenManager.createClientAccessToken(
@@ -194,7 +198,7 @@ public class KeycloakInternalTokenProvider {
             log.debug("AccessToken created with ID: {}, Subject: {}, Issuer: {}",
                     accessToken.getId(), accessToken.getSubject(), accessToken.getIssuer());
 
-            // 5. Sign and serialize token using session.tokens().encode()
+            // 6. Sign and serialize token using session.tokens().encode()
             // This automatically adds kid to JWT header and uses proper signing
             String tokenString = session.tokens().encode(accessToken);
 
