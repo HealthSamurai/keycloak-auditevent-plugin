@@ -235,13 +235,7 @@ public class AuditEventBuilder {
             String resourceTypeCode = mapKeycloakResourceTypeToFhir(event.getResourceType());
             type.put("code", resourceTypeCode);
             type.put("display", event.getResourceType());
-            
-            // Role - role of the entity in the event (Domain Resource = 4)
-            ObjectNode role = resourceEntity.putObject("role");
-            role.put("system", "http://terminology.hl7.org/CodeSystem/object-role");
-            role.put("code", "4");
-            role.put("display", "Domain Resource");
-            
+
             // Description - resource path (without base64 encoding)
             resourceEntity.put("description", event.getResourcePath());
             

@@ -175,7 +175,6 @@ class AuditEventBuilderTest {
         JsonNode entity = entities.get(0);
         assertNotNull(entity.get("what"));
         assertNotNull(entity.get("type"));
-        assertNotNull(entity.get("role"));
         assertEquals("users/user-123", entity.get("description").asText());
         assertNotNull(entity.get("query"));
     }

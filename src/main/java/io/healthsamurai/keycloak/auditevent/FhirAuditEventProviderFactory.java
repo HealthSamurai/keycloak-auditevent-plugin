@@ -10,6 +10,9 @@ import org.keycloak.models.KeycloakSessionFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.InputStream;
+import java.util.Properties;
+
 /**
  * Factory for creating FhirAuditEventProvider instances.
  *
@@ -47,6 +50,10 @@ public class FhirAuditEventProviderFactory implements EventListenerProviderFacto
     @Override
     public void init(Config.Scope config) {
         log.info("Initializing FhirAuditEventProviderFactory");
+
+        // Log git commit info
+        logGitInfo();
+
         log.info("FHIR Server URL: {}", PluginConfig.getFhirServerUrl());
         log.info("Auth Type: {}", PluginConfig.getAuthType());
         log.info("Admin Events Enabled: {}", PluginConfig.isAdminEventsEnabled());
@@ -54,6 +61,43 @@ public class FhirAuditEventProviderFactory implements EventListenerProviderFacto
 
         // Create shared FhirClient instance
         this.fhirClient = new FhirClient();
+    }
+
+    /**
+     * Logs git commit information from git.properties file.
+     */
+    private void logGitInfo() {
+        // Try multiple ways to load git.properties
+        InputStream input = FhirAuditEventProviderFactory.class.getResourceAsStream("/git.properties");
+        if (input == null) {
+            input = Thread.currentThread().getContextClassLoader().getResourceAsStream("git.properties");
+        }
+        if (input == null) {
+            input = getClass().getClassLoader().getResourceAsStream("git.properties");
+        }
+
+        if (input != null) {
+            try {
+                Properties props = new Properties();
+                props.load(input);
+
+                String commitId = props.getProperty("git.commit.id.abbrev", "unknown");
+                String branch = props.getProperty("git.branch", "unknown");
+                String buildTime = props.getProperty("git.build.time", "unknown");
+                String dirty = props.getProperty("git.dirty", "false");
+
+                String dirtyMarker = "true".equals(dirty) ? " (dirty)" : "";
+                log.info("Git: commit={}{}, branch={}, build={}", commitId, dirtyMarker, branch, buildTime);
+            } catch (Exception e) {
+                log.warn("Could not load git.properties: {}", e.getMessage());
+            } finally {
+                try {
+                    input.close();
+                } catch (Exception ignored) {}
+            }
+        } else {
+            log.info("Git: commit=unknown (git.properties not found)");
+        }
     }
 
     /**
